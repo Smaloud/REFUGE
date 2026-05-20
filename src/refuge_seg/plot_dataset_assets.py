@@ -8,7 +8,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFile
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def build_dataset_stats(root: Path, output: Path) -> None:
@@ -38,7 +40,9 @@ def build_dataset_stats(root: Path, output: Path) -> None:
     sample_paths = sorted((root / "train" / "gts").glob("*.bmp"))[:50]
     pixel_counts = {255: 0, 128: 0, 0: 0}
     for path in sample_paths:
-        mask = np.array(Image.open(path).convert("L"))
+        image = Image.open(path)
+        image.load()
+        mask = np.array(image.convert("L"))
         uniq, cnt = np.unique(mask, return_counts=True)
         for value, count in zip(uniq, cnt):
             pixel_counts[int(value)] = pixel_counts.get(int(value), 0) + int(count)
@@ -57,8 +61,12 @@ def build_dataset_stats(root: Path, output: Path) -> None:
 def build_structure_example(root: Path, output: Path) -> None:
     image_path = sorted((root / "train" / "Images").glob("*.jpg"))[0]
     mask_path = root / "train" / "gts" / f"{image_path.stem}.bmp"
-    image = np.array(Image.open(image_path).convert("RGB"))
-    mask = np.array(Image.open(mask_path).convert("L"))
+    image_file = Image.open(image_path)
+    image_file.load()
+    image = np.array(image_file.convert("RGB"))
+    mask_file = Image.open(mask_path)
+    mask_file.load()
+    mask = np.array(mask_file.convert("L"))
     disc = (mask == 128).astype(np.uint8)
     cup = (mask == 0).astype(np.uint8)
 
@@ -106,4 +114,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
