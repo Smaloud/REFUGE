@@ -1,0 +1,150 @@
+{
+  "dice_disc": 1.0,
+  "dice_cup": 4.2275432900254174e-12,
+  "iou_disc": 1.0,
+  "iou_cup": 4.2275432900254174e-12,
+  "mean_dice": 0.5000000000021138,
+  "mean_iou": 0.5000000000021138,
+  "diagnosis_examples": [
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    },
+    {
+      "disc_components": 0,
+      "cup_components": 0,
+      "disc_holes_pixels": 0,
+      "cup_holes_pixels": 0,
+      "cup_outside_disc": false
+    }
+  ]
+}
