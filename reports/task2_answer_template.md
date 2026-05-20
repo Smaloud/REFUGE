@@ -22,6 +22,11 @@
 bash scripts/plot_task2_dataset.sh
 ```
 
+该脚本会同时生成：
+- `outputs/figures/task2_dataset_overview.png`
+- `outputs/figures/task2_dataset_stats.png`
+- `outputs/figures/task2_structure_example.png`
+
 本地已确认的数据划分如下：
 
 | 数据划分 | 图像数 | 标签数 |
@@ -305,6 +310,7 @@ bash scripts/train_task2_topology.sh
 ### 4. 评估并输出验证集结果图
 ```bash
 bash scripts/eval_task2.sh
+bash scripts/eval_task2_topology.sh
 ```
 
 ### 5. 汇总训练曲线和指标图

@@ -77,8 +77,13 @@ def main() -> None:
     histories = {}
     metrics = {}
     for name, history_path, metrics_path in args.experiment or []:
-        histories[name] = load_history(Path(history_path))
-        metrics[name] = load_metrics(Path(metrics_path))
+        history_file = Path(history_path)
+        metrics_file = Path(metrics_path)
+        if not history_file.exists() or not metrics_file.exists():
+            print(f"[skip] {name}: missing {history_file} or {metrics_file}")
+            continue
+        histories[name] = load_history(history_file)
+        metrics[name] = load_metrics(metrics_file)
 
     if histories:
         plot_training_curves(histories, Path(args.curve_output))
@@ -88,4 +93,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

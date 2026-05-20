@@ -11,6 +11,7 @@ bash scripts/plot_task2_dataset.sh
 bash scripts/train_task2_baseline.sh
 bash scripts/train_task2_topology.sh
 bash scripts/eval_task2.sh
+bash scripts/eval_task2_topology.sh
 bash scripts/plot_task2_results.sh
 bash scripts/plot_task2_optional.sh
 python3 -m refuge_seg.predict --config configs/task2_refuge_baseline.yaml --checkpoint outputs/checkpoints/task2_refuge_baseline/best_model.pt --input_dir REFUGE/test/Images --output_dir outputs/predictions/test --postprocess
