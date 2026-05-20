@@ -6,9 +6,11 @@ from typing import Callable
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageFile
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import functional as TF
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 MASK_TO_CLASS = {
@@ -63,7 +65,9 @@ class REFUGEDataset(Dataset):
         return sample
 
     def _load_image(self, path: Path, do_hflip: bool, do_vflip: bool) -> torch.Tensor:
-        image = Image.open(path).convert("RGB")
+        image = Image.open(path)
+        image.load()
+        image = image.convert("RGB")
         image = image.resize((self.image_size, self.image_size), Image.BILINEAR)
         if do_hflip:
             image = TF.hflip(image)
