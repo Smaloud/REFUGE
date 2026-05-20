@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+REFUGE/
+REFUGE.zip
+octmnist_64.npz
+*.pdf
+*.pptx
+
+outputs/
+
+.venv/
+venv/

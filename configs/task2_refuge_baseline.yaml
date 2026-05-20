@@ -1,0 +1,24 @@
+data:
+  root: REFUGE
+  image_size: 512
+
+model:
+  name: unet
+  num_classes: 3
+  base_channels: 32
+
+loss:
+  name: dice_ce
+  lambda_topology: 0.3
+
+train:
+  epochs: 40
+  batch_size: 4
+  num_workers: 4
+  optimizer: adam
+  lr: 0.0003
+  weight_decay: 0.00001
+  scheduler: cosine
+
+output_dir: outputs/checkpoints/task2_refuge_baseline
+

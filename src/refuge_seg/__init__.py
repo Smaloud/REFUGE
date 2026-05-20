@@ -1,0 +1,2 @@
+"""REFUGE segmentation project package."""
+
