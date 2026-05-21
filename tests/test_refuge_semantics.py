@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 
 from refuge_seg.datasets.refuge_dataset import REFUGEDataset, infer_mask_encoding, validate_mask_mapping
-from refuge_seg.predict import load_mask_encoding
+from refuge_seg.predict import load_mask_encoding, render_prediction_mask
 from refuge_seg.utils.metrics import SegmentationMeter
 from refuge_seg.utils.postprocess import diagnose_prediction, postprocess_prediction
 
@@ -161,3 +161,67 @@ def test_load_mask_encoding_accepts_string_keys(tmp_path) -> None:
     assert encoding.background == 255
     assert encoding.disc_rim == 128
     assert encoding.cup == 0
+
+
+def test_load_mask_encoding_accepts_rgb_values(tmp_path) -> None:
+    checkpoint = {
+        "config": {
+            "data": {
+                "mask_encoding": {
+                    "0": [0, 0, 0],
+                    "1": [255, 255, 255],
+                    "2": [255, 0, 0],
+                }
+            }
+        }
+    }
+
+    encoding = load_mask_encoding({}, checkpoint, tmp_path)  # type: ignore[arg-type]
+
+    assert encoding.background == (0, 0, 0)
+    assert encoding.disc_rim == (255, 255, 255)
+    assert encoding.cup == (255, 0, 0)
+
+
+def test_rgb_mask_encoding_preserves_three_raw_tokens(tmp_path) -> None:
+    mask_dir = tmp_path / "train" / "gts"
+    image_dir = tmp_path / "train" / "Images"
+    mask_dir.mkdir(parents=True)
+    image_dir.mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(image_dir / "case1.jpg")
+    mask = np.zeros((4, 4, 3), dtype=np.uint8)
+    mask[:, :] = [0, 0, 0]
+    mask[1:3, 1:3] = [255, 255, 255]
+    mask[2, 2] = [255, 0, 0]
+    Image.fromarray(mask).save(mask_dir / "case1.bmp")
+
+    encoding = infer_mask_encoding(tmp_path)
+    dataset = REFUGEDataset(tmp_path, "train", image_size=4)
+    sample = dataset[0]["mask"]
+
+    assert encoding.background == (0, 0, 0)
+    assert encoding.disc_rim == (255, 255, 255)
+    assert encoding.cup == (255, 0, 0)
+    assert sample[2, 2].item() == 2
+
+
+def test_render_prediction_mask_preserves_rgb_tokens(tmp_path) -> None:
+    checkpoint = {
+        "config": {
+            "data": {
+                "mask_encoding": {
+                    "0": [0, 0, 0],
+                    "1": [255, 255, 255],
+                    "2": [255, 0, 0],
+                }
+            }
+        }
+    }
+    encoding = load_mask_encoding({}, checkpoint, tmp_path)  # type: ignore[arg-type]
+    pred = np.array([[0, 1], [2, 0]], dtype=np.uint8)
+
+    rendered = render_prediction_mask(pred, encoding)
+
+    assert rendered.shape == (2, 2, 3)
+    assert tuple(rendered[0, 1]) == (255, 255, 255)
+    assert tuple(rendered[1, 0]) == (255, 0, 0)

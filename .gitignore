@@ -7,6 +7,7 @@ REFUGE.zip
 octmnist_64.npz
 *.pdf
 *.pptx
+*.tar.gz
 
 outputs/
 

@@ -7,6 +7,8 @@ import numpy as np
 from PIL import Image, ImageFile
 
 from refuge_seg.datasets.refuge_dataset import (
+    _add_token_counts,
+    _load_mask_array,
     infer_mask_encoding,
     summarize_mask_mapping,
     validate_mask_mapping,
@@ -49,9 +51,10 @@ def main() -> None:
         if mask_dir.exists():
             sample_masks = sorted(mask_dir.glob("*.bmp"))[:3]
             for mask_path in sample_masks:
-                mask = np.array(Image.open(mask_path).convert("L"), dtype=np.uint8)
-                values, counts = np.unique(mask, return_counts=True)
-                raw_counts = {int(value): int(count) for value, count in zip(values, counts)}
+                mask = _load_mask_array(mask_path)
+                token_counts: dict[int | tuple[int, int, int], int] = {}
+                _add_token_counts(token_counts, mask, is_color=mask.ndim == 3)
+                raw_counts = {str(value): int(count) for value, count in token_counts.items()}
                 print(f"  [mask] {mask_path.name}: {raw_counts}")
             encoding = infer_mask_encoding(root, split)
             summary = summarize_mask_mapping(root, split, encoding, max_masks=20)

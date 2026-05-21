@@ -12,14 +12,17 @@ from torchvision.transforms import functional as TF
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
+MaskToken = int | tuple[int, int, int]
+
+
 @dataclass(frozen=True)
 class MaskEncoding:
-    background: int
-    disc_rim: int = 128
-    cup: int = 0
+    background: MaskToken
+    disc_rim: MaskToken
+    cup: MaskToken
 
     @property
-    def raw_to_class(self) -> dict[int, int]:
+    def raw_to_class(self) -> dict[MaskToken, int]:
         return {
             self.background: 0,
             self.disc_rim: 1,
@@ -27,7 +30,7 @@ class MaskEncoding:
         }
 
     @property
-    def class_to_raw(self) -> dict[int, int]:
+    def class_to_raw(self) -> dict[int, MaskToken]:
         return {
             0: self.background,
             1: self.disc_rim,
@@ -43,24 +46,67 @@ class DatasetConfig:
     num_workers: int = 4
 
 
-def _mask_counts(mask_paths: list[Path]) -> dict[int, int]:
-    counts: dict[int, int] = {}
-    for path in mask_paths:
-        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+def _normalize_token(value: MaskToken | list[int]) -> MaskToken:
+    if isinstance(value, list):
+        return tuple(int(v) for v in value[:3])
+    if isinstance(value, tuple):
+        return tuple(int(v) for v in value[:3])
+    return int(value)
+
+
+def _load_mask_array(path: Path) -> np.ndarray:
+    mask = np.array(Image.open(path))
+    if mask.ndim == 3 and mask.shape[2] > 3:
+        mask = mask[:, :, :3]
+    if mask.ndim == 3 and np.all(mask[:, :, 0] == mask[:, :, 1]) and np.all(mask[:, :, 0] == mask[:, :, 2]):
+        mask = mask[:, :, 0]
+    return mask
+
+
+def _map_mask_to_classes(mask: np.ndarray, encoding: MaskEncoding) -> np.ndarray:
+    mapped = np.zeros(mask.shape if mask.ndim == 2 else mask.shape[:2], dtype=np.int64)
+    for raw_value, class_id in encoding.raw_to_class.items():
+        if mask.ndim == 2:
+            mapped[mask == raw_value] = class_id
+        else:
+            token = np.array(raw_value, dtype=mask.dtype)
+            mapped[np.all(mask == token, axis=-1)] = class_id
+    return mapped
+
+
+def _add_token_counts(counts: dict[MaskToken, int], mask: np.ndarray, is_color: bool = False) -> None:
+    if not is_color:
         values, value_counts = np.unique(mask, return_counts=True)
         for value, count in zip(values, value_counts):
-            counts[int(value)] = counts.get(int(value), 0) + int(count)
+            key = int(value)
+            counts[key] = counts.get(key, 0) + int(count)
+    else:
+        flat = mask.reshape(-1, mask.shape[-1])
+        values, value_counts = np.unique(flat, axis=0, return_counts=True)
+        for value, count in zip(values, value_counts):
+            key = tuple(int(v) for v in value.tolist()[:3])
+            counts[key] = counts.get(key, 0) + int(count)
+
+
+def _mask_counts(mask_paths: list[Path]) -> dict[MaskToken, int]:
+    counts: dict[MaskToken, int] = {}
+    for path in mask_paths:
+        mask = _load_mask_array(path)
+        _add_token_counts(counts, mask, is_color=mask.ndim == 3)
     return counts
 
 
-def _edge_counts(mask_paths: list[Path]) -> dict[int, int]:
-    counts: dict[int, int] = {}
+def _edge_counts(mask_paths: list[Path]) -> dict[MaskToken, int]:
+    counts: dict[MaskToken, int] = {}
     for path in mask_paths:
-        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
-        edge = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
-        values, value_counts = np.unique(edge, return_counts=True)
-        for value, count in zip(values, value_counts):
-            counts[int(value)] = counts.get(int(value), 0) + int(count)
+        mask = _load_mask_array(path)
+        if mask.ndim == 2:
+            edge = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
+            is_color = False
+        else:
+            edge = np.concatenate([mask[0, :, :], mask[-1, :, :], mask[:, 0, :], mask[:, -1, :]], axis=0)
+            is_color = True
+        _add_token_counts(counts, edge, is_color=is_color)
     return counts
 
 
@@ -71,12 +117,16 @@ def infer_mask_encoding(root: str | Path, split: str = "train", max_masks: int =
         mask_dir = Path(root) / "val" / "gts"
         mask_paths = sorted(mask_dir.glob("*.bmp"))[:max_masks]
     if not mask_paths:
-        return MaskEncoding(background=255, cup=0)
+        return MaskEncoding(background=255, disc_rim=128, cup=0)
 
     counts = _mask_counts(mask_paths)
     ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
     if len(ranked) < 3:
-        raise ValueError(f"Expected at least 3 mask values under {mask_dir}, found {ranked}")
+        raise ValueError(
+            f"Expected at least 3 REFUGE mask labels under {mask_dir}, found {ranked}. "
+            "Task 2 needs separate background, disc rim, and cup labels; this split looks binary "
+            "or the label files were converted incorrectly."
+        )
 
     edge_ranked = sorted(_edge_counts(mask_paths).items(), key=lambda item: item[1], reverse=True)
     background = edge_ranked[0][0]
@@ -103,11 +153,12 @@ def summarize_mask_mapping(
         encoding.cup: "cup",
     }
     for path in mask_paths:
-        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
-        values, value_counts = np.unique(mask, return_counts=True)
-        total += int(mask.size)
-        for value, count in zip(values, value_counts):
-            counts[mapping.get(int(value), "unknown")] += int(count)
+        mask = _load_mask_array(path)
+        total += int(mask.shape[0] * mask.shape[1])
+        token_counts: dict[MaskToken, int] = {}
+        _add_token_counts(token_counts, mask, is_color=mask.ndim == 3)
+        for value, count in token_counts.items():
+            counts[mapping.get(value, "unknown")] += int(count)
 
     if total == 0:
         return {"num_masks": 0, "background_ratio": 0.0, "disc_rim_ratio": 0.0, "cup_ratio": 0.0}
@@ -199,12 +250,14 @@ class REFUGEDataset(Dataset):
         )
 
     def _load_mask(self, path: Path, do_hflip: bool, do_vflip: bool) -> torch.Tensor:
-        mask = Image.open(path).convert("L")
-        mask = mask.resize((self.image_size, self.image_size), Image.NEAREST)
-        mask = np.array(mask, dtype=np.uint8)
-        mapped = np.zeros_like(mask, dtype=np.int64)
-        for raw_value, class_id in self.mask_encoding.raw_to_class.items():
-            mapped[mask == raw_value] = class_id
+        mask_image = Image.open(path)
+        mask_image = mask_image.resize((self.image_size, self.image_size), Image.NEAREST)
+        mask = np.array(mask_image)
+        if mask.ndim == 3 and mask.shape[2] > 3:
+            mask = mask[:, :, :3]
+        if mask.ndim == 3 and np.all(mask[:, :, 0] == mask[:, :, 1]) and np.all(mask[:, :, 0] == mask[:, :, 2]):
+            mask = mask[:, :, 0]
+        mapped = _map_mask_to_classes(mask, self.mask_encoding)
         if do_hflip:
             mapped = np.fliplr(mapped).copy()
         if do_vflip:

@@ -13,6 +13,8 @@ from PIL import Image, ImageFile
 
 from refuge_seg.datasets.refuge_dataset import (
     REFUGEDataset,
+    _add_token_counts,
+    _load_mask_array,
     infer_mask_encoding,
     summarize_mask_mapping,
 )
@@ -45,13 +47,14 @@ def plot_label_sanity(data_root: str | Path, output: str | Path, num_samples: in
         sample = dataset[row]
         image_path = data_root / "train" / "Images" / f"{sample['id']}.jpg"
         mask_path = data_root / "train" / "gts" / f"{sample['id']}.bmp"
-        raw_mask = np.array(Image.open(mask_path).convert("L"), dtype=np.uint8)
-        values, counts = np.unique(raw_mask, return_counts=True)
-        raw_counts = ", ".join(f"{int(v)}:{int(c)}" for v, c in zip(values, counts))
+        raw_mask = _load_mask_array(mask_path)
+        token_counts: dict[int | tuple[int, int, int], int] = {}
+        _add_token_counts(token_counts, raw_mask, is_color=raw_mask.ndim == 3)
+        raw_counts = ", ".join(f"{value}:{count}" for value, count in token_counts.items())
 
         axes[row, 0].imshow(np.array(Image.open(image_path).convert("RGB")))
         axes[row, 0].set_title(f"Image {sample['id']}")
-        axes[row, 1].imshow(raw_mask, cmap="gray")
+        axes[row, 1].imshow(raw_mask, cmap="gray" if raw_mask.ndim == 2 else None)
         axes[row, 1].set_title(f"Raw mask\n{raw_counts}")
         axes[row, 2].imshow(colorize_mask(sample["mask"].numpy()))
         axes[row, 2].set_title("Mapped mask")

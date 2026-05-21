@@ -10,7 +10,7 @@ import yaml
 from PIL import Image, ImageFile
 from torchvision.transforms import functional as TF
 
-from refuge_seg.datasets.refuge_dataset import MaskEncoding, infer_mask_encoding
+from refuge_seg.datasets.refuge_dataset import MaskEncoding, _normalize_token, infer_mask_encoding
 from refuge_seg.models import AttentionUNet, UNet
 from refuge_seg.utils.postprocess import postprocess_prediction
 
@@ -38,7 +38,7 @@ def load_mask_encoding(cfg: dict, checkpoint: dict, input_dir: Path) -> MaskEnco
     configured = cfg.get("data", {}).get("mask_encoding")
     encoding = saved or configured
     if encoding:
-        normalized = {int(key): int(value) for key, value in encoding.items()}
+        normalized = {int(key): _normalize_token(value) for key, value in encoding.items()}
         return MaskEncoding(
             background=normalized[0],
             disc_rim=normalized[1],
@@ -52,7 +52,41 @@ def load_mask_encoding(cfg: dict, checkpoint: dict, input_dir: Path) -> MaskEnco
     parent = input_dir.parent.parent
     if (parent / "train" / "gts").exists() or (parent / "val" / "gts").exists():
         return infer_mask_encoding(parent)
-    return MaskEncoding(background=255, cup=0)
+    return MaskEncoding(background=255, disc_rim=128, cup=0)
+
+
+def raw_mask_value(value) -> int:
+    if isinstance(value, (tuple, list)):
+        return int(value[0])
+    return int(value)
+
+
+def is_grayscale_token(value) -> bool:
+    if not isinstance(value, (tuple, list)):
+        return True
+    return len(value) >= 3 and int(value[0]) == int(value[1]) == int(value[2])
+
+
+def raw_rgb_value(value) -> tuple[int, int, int]:
+    if isinstance(value, (tuple, list)):
+        return tuple(int(v) for v in value[:3])
+    gray = int(value)
+    return gray, gray, gray
+
+
+def render_prediction_mask(pred: np.ndarray, encoding: MaskEncoding) -> np.ndarray:
+    raw_values = encoding.class_to_raw
+    if all(is_grayscale_token(value) for value in raw_values.values()):
+        save_mask = np.full_like(pred, raw_mask_value(raw_values[0]), dtype=np.uint8)
+        save_mask[pred == 1] = raw_mask_value(raw_values[1])
+        save_mask[pred == 2] = raw_mask_value(raw_values[2])
+        return save_mask
+
+    save_mask = np.zeros((*pred.shape, 3), dtype=np.uint8)
+    save_mask[:, :] = raw_rgb_value(raw_values[0])
+    save_mask[pred == 1] = raw_rgb_value(raw_values[1])
+    save_mask[pred == 2] = raw_rgb_value(raw_values[2])
+    return save_mask
 
 
 @torch.no_grad()
@@ -90,9 +124,7 @@ def main() -> None:
             pred = postprocess_prediction(pred)
         values, counts = np.unique(pred, return_counts=True)
         summary[image_path.stem] = {str(int(value)): int(count) for value, count in zip(values, counts)}
-        save_mask = np.full_like(pred, mask_encoding.class_to_raw[0], dtype=np.uint8)
-        save_mask[pred == 1] = mask_encoding.class_to_raw[1]
-        save_mask[pred == 2] = mask_encoding.class_to_raw[2]
+        save_mask = render_prediction_mask(pred, mask_encoding)
         Image.fromarray(save_mask).save(output_dir / f"{image_path.stem}.bmp")
 
     unique_distributions = {tuple(sorted(item.items())) for item in summary.values()}

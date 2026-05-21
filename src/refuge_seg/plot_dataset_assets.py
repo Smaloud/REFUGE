@@ -10,7 +10,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageFile
 
-from refuge_seg.datasets.refuge_dataset import infer_mask_encoding, summarize_mask_mapping
+from refuge_seg.datasets.refuge_dataset import (
+    _load_mask_array,
+    _map_mask_to_classes,
+    infer_mask_encoding,
+    summarize_mask_mapping,
+)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -66,12 +71,11 @@ def build_structure_example(root: Path, output: Path) -> None:
     image_file = Image.open(image_path)
     image_file.load()
     image = np.array(image_file.convert("RGB"))
-    mask_file = Image.open(mask_path)
-    mask_file.load()
-    mask = np.array(mask_file.convert("L"))
+    mask = _load_mask_array(mask_path)
     encoding = infer_mask_encoding(root, "train")
-    disc = np.isin(mask, [encoding.disc_rim, encoding.cup]).astype(np.uint8)
-    cup = (mask == encoding.cup).astype(np.uint8)
+    mapped_mask = _map_mask_to_classes(mask, encoding)
+    disc = np.isin(mapped_mask, [1, 2]).astype(np.uint8)
+    cup = (mapped_mask == 2).astype(np.uint8)
 
     overlay = image.copy().astype(np.float32)
     overlay[disc == 1] = overlay[disc == 1] * 0.5 + np.array([255, 200, 0], dtype=np.float32) * 0.5
@@ -80,7 +84,7 @@ def build_structure_example(root: Path, output: Path) -> None:
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     axes[0].imshow(image)
     axes[0].set_title("Fundus Image")
-    axes[1].imshow(mask, cmap="gray")
+    axes[1].imshow(mask, cmap="gray" if mask.ndim == 2 else None)
     axes[1].set_title("Raw Mask")
     axes[2].imshow(disc, cmap="gray")
     axes[2].set_title("Optic Disc")
