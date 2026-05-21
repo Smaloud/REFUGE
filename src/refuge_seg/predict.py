@@ -6,11 +6,13 @@ from pathlib import Path
 import numpy as np
 import torch
 import yaml
-from PIL import Image
+from PIL import Image, ImageFile
 from torchvision.transforms import functional as TF
 
 from refuge_seg.models import AttentionUNet, UNet
 from refuge_seg.utils.postprocess import postprocess_prediction
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def build_model(name: str, num_classes: int, base_channels: int):
