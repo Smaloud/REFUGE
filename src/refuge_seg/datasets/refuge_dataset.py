@@ -43,6 +43,27 @@ class DatasetConfig:
     num_workers: int = 4
 
 
+def _mask_counts(mask_paths: list[Path]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for path in mask_paths:
+        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+        values, value_counts = np.unique(mask, return_counts=True)
+        for value, count in zip(values, value_counts):
+            counts[int(value)] = counts.get(int(value), 0) + int(count)
+    return counts
+
+
+def _edge_counts(mask_paths: list[Path]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for path in mask_paths:
+        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+        edge = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
+        values, value_counts = np.unique(edge, return_counts=True)
+        for value, count in zip(values, value_counts):
+            counts[int(value)] = counts.get(int(value), 0) + int(count)
+    return counts
+
+
 def infer_mask_encoding(root: str | Path, split: str = "train", max_masks: int = 20) -> MaskEncoding:
     mask_dir = Path(root) / split / "gts"
     mask_paths = sorted(mask_dir.glob("*.bmp"))[:max_masks]
@@ -52,21 +73,74 @@ def infer_mask_encoding(root: str | Path, split: str = "train", max_masks: int =
     if not mask_paths:
         return MaskEncoding(background=255, cup=0)
 
-    counts: dict[int, int] = {}
-    for path in mask_paths:
-        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
-        values, value_counts = np.unique(mask, return_counts=True)
-        for value, count in zip(values, value_counts):
-            counts[int(value)] = counts.get(int(value), 0) + int(count)
-
+    counts = _mask_counts(mask_paths)
     ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
     if len(ranked) < 3:
         raise ValueError(f"Expected at least 3 mask values under {mask_dir}, found {ranked}")
 
-    background = ranked[0][0]
-    disc_rim = ranked[1][0]
-    cup = ranked[-1][0]
+    edge_ranked = sorted(_edge_counts(mask_paths).items(), key=lambda item: item[1], reverse=True)
+    background = edge_ranked[0][0]
+    foreground = [(value, count) for value, count in ranked if value != background]
+    if len(foreground) < 2:
+        raise ValueError(f"Could not infer disc/cup labels under {mask_dir}; counts={ranked}")
+    disc_rim = foreground[0][0]
+    cup = foreground[-1][0]
     return MaskEncoding(background=background, disc_rim=disc_rim, cup=cup)
+
+
+def summarize_mask_mapping(
+    root: str | Path,
+    split: str,
+    encoding: MaskEncoding,
+    max_masks: int = 20,
+) -> dict[str, float | int]:
+    mask_paths = sorted((Path(root) / split / "gts").glob("*.bmp"))[:max_masks]
+    counts = {"background": 0, "disc_rim": 0, "cup": 0, "unknown": 0}
+    total = 0
+    mapping = {
+        encoding.background: "background",
+        encoding.disc_rim: "disc_rim",
+        encoding.cup: "cup",
+    }
+    for path in mask_paths:
+        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+        values, value_counts = np.unique(mask, return_counts=True)
+        total += int(mask.size)
+        for value, count in zip(values, value_counts):
+            counts[mapping.get(int(value), "unknown")] += int(count)
+
+    if total == 0:
+        return {"num_masks": 0, "background_ratio": 0.0, "disc_rim_ratio": 0.0, "cup_ratio": 0.0}
+    return {
+        "num_masks": len(mask_paths),
+        "background_ratio": counts["background"] / total,
+        "disc_rim_ratio": counts["disc_rim"] / total,
+        "cup_ratio": counts["cup"] / total,
+        "foreground_ratio": (counts["disc_rim"] + counts["cup"]) / total,
+        "unknown_ratio": counts["unknown"] / total,
+    }
+
+
+def validate_mask_mapping(root: str | Path, split: str, encoding: MaskEncoding) -> None:
+    summary = summarize_mask_mapping(root, split, encoding)
+    if summary["num_masks"] == 0:
+        return
+    problems = []
+    if summary["unknown_ratio"] > 0:
+        problems.append(f"unknown_ratio={summary['unknown_ratio']:.4f}")
+    if summary["background_ratio"] < 0.7:
+        problems.append(f"background_ratio={summary['background_ratio']:.4f}")
+    if not 0 < summary["foreground_ratio"] < 0.3:
+        problems.append(f"foreground_ratio={summary['foreground_ratio']:.4f}")
+    if summary["disc_rim_ratio"] <= 0 or summary["cup_ratio"] <= 0:
+        problems.append(
+            f"disc_rim_ratio={summary['disc_rim_ratio']:.4f}, cup_ratio={summary['cup_ratio']:.4f}"
+        )
+    if problems:
+        raise ValueError(
+            f"Suspicious REFUGE mask mapping for split={split}: {encoding}; "
+            f"{', '.join(problems)}. Check raw mask encoding before training."
+        )
 
 
 class REFUGEDataset(Dataset):
@@ -86,6 +160,8 @@ class REFUGEDataset(Dataset):
         self.has_masks = self.masks_dir.exists()
         self.image_paths = sorted(self.images_dir.glob("*.jpg"))
         self.mask_encoding = infer_mask_encoding(self.root, split) if self.has_masks else infer_mask_encoding(self.root)
+        if self.has_masks:
+            validate_mask_mapping(self.root, split, self.mask_encoding)
 
         if not self.image_paths:
             raise FileNotFoundError(f"No images found under {self.images_dir}")

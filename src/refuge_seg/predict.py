@@ -38,10 +38,11 @@ def load_mask_encoding(cfg: dict, checkpoint: dict, input_dir: Path) -> MaskEnco
     configured = cfg.get("data", {}).get("mask_encoding")
     encoding = saved or configured
     if encoding:
+        normalized = {int(key): int(value) for key, value in encoding.items()}
         return MaskEncoding(
-            background=int(encoding[0] if 0 in encoding else encoding["0"]),
-            disc_rim=int(encoding[1] if 1 in encoding else encoding["1"]),
-            cup=int(encoding[2] if 2 in encoding else encoding["2"]),
+            background=normalized[0],
+            disc_rim=normalized[1],
+            cup=normalized[2],
         )
 
     data_root = cfg.get("data", {}).get("root")

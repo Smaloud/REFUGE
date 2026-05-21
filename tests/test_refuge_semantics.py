@@ -2,7 +2,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from refuge_seg.datasets.refuge_dataset import REFUGEDataset, infer_mask_encoding
+from refuge_seg.datasets.refuge_dataset import REFUGEDataset, infer_mask_encoding, validate_mask_mapping
+from refuge_seg.predict import load_mask_encoding
 from refuge_seg.utils.metrics import SegmentationMeter
 from refuge_seg.utils.postprocess import diagnose_prediction, postprocess_prediction
 
@@ -114,7 +115,7 @@ def test_mask_encoding_infers_by_frequency_when_labels_differ(tmp_path) -> None:
         [
             [10, 10, 10, 10],
             [10, 20, 20, 10],
-            [10, 30, 30, 10],
+            [10, 20, 30, 10],
             [10, 10, 10, 10],
         ],
         dtype=np.uint8,
@@ -126,3 +127,37 @@ def test_mask_encoding_infers_by_frequency_when_labels_differ(tmp_path) -> None:
     assert encoding.background == 10
     assert encoding.disc_rim == 20
     assert encoding.cup == 30
+
+
+def test_mask_mapping_validation_rejects_large_foreground(tmp_path) -> None:
+    mask_dir = tmp_path / "train" / "gts"
+    mask_dir.mkdir(parents=True)
+    mask = np.array(
+        [
+            [0, 0, 0, 0],
+            [0, 255, 128, 0],
+            [0, 128, 255, 0],
+            [0, 255, 128, 0],
+        ],
+        dtype=np.uint8,
+    )
+    Image.fromarray(mask).save(mask_dir / "case1.bmp")
+
+    encoding = infer_mask_encoding(tmp_path)
+
+    try:
+        validate_mask_mapping(tmp_path, "train", encoding)
+    except ValueError as exc:
+        assert "foreground_ratio" in str(exc)
+    else:
+        raise AssertionError("Expected suspicious mask mapping to fail")
+
+
+def test_load_mask_encoding_accepts_string_keys(tmp_path) -> None:
+    checkpoint = {"config": {"data": {"mask_encoding": {"0": 255, "1": 128, "2": 0}}}}
+
+    encoding = load_mask_encoding({}, checkpoint, tmp_path)  # type: ignore[arg-type]
+
+    assert encoding.background == 255
+    assert encoding.disc_rim == 128
+    assert encoding.cup == 0

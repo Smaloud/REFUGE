@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageFile
 
+from refuge_seg.datasets.refuge_dataset import infer_mask_encoding, summarize_mask_mapping
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -37,18 +39,18 @@ def build_dataset_stats(root: Path, output: Path) -> None:
     axes[0].set_ylabel("count")
     axes[0].legend()
 
-    sample_paths = sorted((root / "train" / "gts").glob("*.bmp"))[:50]
-    pixel_counts = {255: 0, 128: 0, 0: 0}
-    for path in sample_paths:
-        image = Image.open(path)
-        image.load()
-        mask = np.array(image.convert("L"))
-        uniq, cnt = np.unique(mask, return_counts=True)
-        for value, count in zip(uniq, cnt):
-            pixel_counts[int(value)] = pixel_counts.get(int(value), 0) + int(count)
-
-    labels = ["background(255)", "disc(128)", "cup(0)"]
-    values = [pixel_counts.get(255, 0), pixel_counts.get(128, 0), pixel_counts.get(0, 0)]
+    encoding = infer_mask_encoding(root, "train", max_masks=50)
+    summary = summarize_mask_mapping(root, "train", encoding, max_masks=50)
+    labels = [
+        f"background({encoding.background})",
+        f"disc rim({encoding.disc_rim})",
+        f"cup({encoding.cup})",
+    ]
+    values = [
+        summary["background_ratio"],
+        summary["disc_rim_ratio"],
+        summary["cup_ratio"],
+    ]
     axes[1].pie(values, labels=labels, autopct="%1.1f%%")
     axes[1].set_title("Pixel Ratio in First 50 Train Masks")
 
@@ -67,8 +69,9 @@ def build_structure_example(root: Path, output: Path) -> None:
     mask_file = Image.open(mask_path)
     mask_file.load()
     mask = np.array(mask_file.convert("L"))
-    disc = np.isin(mask, [0, 128]).astype(np.uint8)
-    cup = (mask == 0).astype(np.uint8)
+    encoding = infer_mask_encoding(root, "train")
+    disc = np.isin(mask, [encoding.disc_rim, encoding.cup]).astype(np.uint8)
+    cup = (mask == encoding.cup).astype(np.uint8)
 
     overlay = image.copy().astype(np.float32)
     overlay[disc == 1] = overlay[disc == 1] * 0.5 + np.array([255, 200, 0], dtype=np.float32) * 0.5
