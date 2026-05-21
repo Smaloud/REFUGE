@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import torch
@@ -115,22 +116,27 @@ def main() -> None:
     )
     scheduler = build_scheduler(cfg["train"]["scheduler"], optimizer, cfg["train"]["epochs"])
 
-    history = {"train_loss": [], "val_loss": [], "val_mean_dice": []}
+    history = {"train_loss": [], "val_loss": [], "val_mean_dice": [], "epoch_time_sec": []}
     best_score = -1.0
+    started_at = time.perf_counter()
 
     for epoch in range(1, cfg["train"]["epochs"] + 1):
+        epoch_started_at = time.perf_counter()
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_metrics, sample_triplet = validate(model, val_loader, criterion, device)
         if scheduler is not None:
             scheduler.step()
+        epoch_time = time.perf_counter() - epoch_started_at
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_metrics["val_loss"])
         history["val_mean_dice"].append(val_metrics["mean_dice"])
+        history["epoch_time_sec"].append(epoch_time)
 
         epoch_log = {
             "epoch": epoch,
             "train_loss": train_loss,
+            "epoch_time_sec": epoch_time,
             **val_metrics,
         }
         print(json.dumps(epoch_log, ensure_ascii=False))
@@ -149,8 +155,22 @@ def main() -> None:
                 save_prediction_grid(*sample_triplet, output_dir / "best_prediction.png")
 
     save_training_curves(history, output_dir / "training_curves.png")
+    total_time = time.perf_counter() - started_at
     with open(output_dir / "history.json", "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "training_summary.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "config": cfg,
+                "best_mean_dice": best_score,
+                "total_time_sec": total_time,
+                "avg_epoch_time_sec": sum(history["epoch_time_sec"]) / max(len(history["epoch_time_sec"]), 1),
+                "num_epochs": cfg["train"]["epochs"],
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
 
 
 if __name__ == "__main__":

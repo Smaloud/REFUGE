@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--split", type=str, default="val")
     parser.add_argument("--postprocess", action="store_true")
+    parser.add_argument("--output-name", type=str, default=None)
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
@@ -58,7 +59,8 @@ def main() -> None:
     meter = SegmentationMeter()
     diagnosis = []
     prediction_summary = {}
-    output_dir = Path(cfg["output_dir"]) / f"eval_{args.split}"
+    output_name = args.output_name or f"eval_{args.split}"
+    output_dir = Path(cfg["output_dir"]) / output_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for index, batch in enumerate(tqdm(loader, desc="evaluate")):
@@ -90,6 +92,14 @@ def main() -> None:
 
     summary = meter.compute()
     summary["diagnosis_examples"] = diagnosis[:20]
+    summary["diagnosis_summary"] = {
+        "num_samples": len(diagnosis),
+        "disc_components_gt1": sum(int(item["disc_components"] > 1) for item in diagnosis),
+        "cup_components_gt1": sum(int(item["cup_components"] > 1) for item in diagnosis),
+        "disc_holes_cases": sum(int(item["disc_holes_pixels"] > 0) for item in diagnosis),
+        "cup_holes_cases": sum(int(item["cup_holes_pixels"] > 0) for item in diagnosis),
+        "cup_outside_disc_cases": sum(int(item["cup_outside_disc"]) for item in diagnosis),
+    }
     summary["num_unique_class_distributions"] = len(
         {tuple(sorted(item.items())) for item in prediction_summary.values()}
     )

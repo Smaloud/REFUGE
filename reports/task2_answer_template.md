@@ -1,377 +1,405 @@
-# 任务二 REFUGE 视盘视杯分割报告
+# 任务二 REFUGE 视盘视杯分割报告工作稿
 
-> 这份文档用于后续制作 PPT，因此优先组织“图片 + 表格 + 关键结论”。每个小节都给出了建议插图、建议表格和训练后待补充内容。
+> 用途：先作为信息记录和答辩材料库，训练完成后再据此制作 PPT。本文只写入已经能由代码、数据检查或训练产物支撑的内容；必须依赖训练结果的部分统一保留 `待补充`。
 
-## 一、Task 2.1 认识数据集
+## 0. 覆盖矩阵
 
-### 1. 数据集加载与路径说明
-本项目使用本地目录 `REFUGE/{train,val,test}`。其中：
-- `train/Images` 和 `train/gts` 为训练集图像与标签
-- `val/Images` 和 `val/gts` 为验证集图像与标签
-- `test/Images` 只有图像，没有公开标签
+| PDF 要求 | 当前状态 | 代码/文件证据 | 训练后待补充 |
+|---|---|---|---|
+| Task 2.1 加载 REFUGE 数据集并解决路径问题 | 已完成 | `src/refuge_seg/datasets/refuge_dataset.py`、`src/refuge_seg/check_data.py` | 无 |
+| Task 2.1 展示 image 和 label | 已完成脚本 | `scripts/plot_task2_dataset.sh`、`scripts/plot_task2_presentation.sh` | 用最新数据重新生成图片 |
+| Task 2.1 描述视盘/视杯特点 | 已完成文字 | 本报告 Task 2.1 | 可配合样本图调整措辞 |
+| Task 2.2 调研主流分割网络 | 已完成文字 | 本报告 Task 2.2 | 可补一页网络示意图 |
+| Task 2.2 选择基座模型并说明理由 | 已完成 | `src/refuge_seg/models/unet.py`、`configs/task2_refuge_baseline.yaml` | 结合最终指标补充选择合理性 |
+| Task 2.3 分割与分类任务差异 | 已完成文字 | 本报告 Task 2.3 | 无 |
+| Task 2.3 损失函数方向：CE/Dice/Dice+CE | 已完成代码，待训练对比 | `src/refuge_seg/losses/segmentation_losses.py`、`configs/task2_refuge_loss_*.yaml` | CE、Dice、Dice+CE 指标和曲线 |
+| Task 2.3 评估指标 IoU/Dice | 已完成 | `src/refuge_seg/utils/metrics.py`、`src/refuge_seg/evaluate.py` | 最终数值表 |
+| Task 2.4 可调参数列表 | 已完成文字和配置 | `configs/task2_refuge_*.yaml` | 无 |
+| Task 2.4 参数影响实验 | 已完成配置，待训练 | `configs/task2_refuge_lr_1e4.yaml`、`configs/task2_refuge_batch2.yaml`、`configs/task2_refuge_scheduler_step.yaml` | 训练时长、曲线、收敛分析 |
+| Task 2.5.1 孔洞/连通域检查 | 已完成代码 | `src/refuge_seg/utils/postprocess.py`、`src/refuge_seg/evaluate.py` | 诊断统计表和前后对比图 |
+| Task 2.5.1 后处理修复算法 | 已完成代码和示意图脚本 | `postprocess_prediction`、`scripts/plot_task2_presentation.sh` | 用真实预测补充案例 |
+| Task 2.5.2 杯在盘内拓扑约束检查 | 已完成诊断代码 | `diagnose_prediction` | 拓扑违规数 |
+| Task 2.5.2 自定义约束损失 | 已完成代码 | `TopologyAwareLoss` | 结合训练结果解释效果 |
+| Task 2.5.2 难样本普通损失 vs 约束损失 | 已完成脚本，待训练 | `scripts/plot_task2_optional.sh` | 难样本图和结论 |
 
-对应代码：
-- `src/refuge_seg/datasets/refuge_dataset.py`
+## 1. Task 2.1 认识数据集
 
-建议 PPT 图片：
-- `outputs/figures/task2_dataset_overview.png`
-- `outputs/figures/task2_dataset_stats.png`
-- `outputs/figures/task2_label_sanity.png`
+### 1.1 数据集路径与加载
 
-生成命令：
-```bash
-bash scripts/plot_task2_dataset.sh
-```
+本项目使用 REFUGE 视盘/视杯分割数据集，目录约定为：
 
-该脚本会同时生成：
-- `outputs/figures/task2_dataset_overview.png`
-- `outputs/figures/task2_dataset_stats.png`
-- `outputs/figures/task2_structure_example.png`
+| 子目录 | 内容 | 标签情况 |
+|---|---|---|
+| `REFUGE/train/Images` | 训练图像 | 有对应 `train/gts` |
+| `REFUGE/train/gts` | 训练标签 | 灰度三类标签 |
+| `REFUGE/val/Images` | 验证图像 | 有对应 `val/gts` |
+| `REFUGE/val/gts` | 验证标签 | 灰度三类标签 |
+| `REFUGE/test/Images` | 测试图像 | 无公开标签 |
 
-额外建议生成答辩诊断图：
-```bash
-bash scripts/plot_task2_presentation.sh
-```
+本地数据检查结果：
 
-其中 `outputs/figures/task2_label_sanity.png` 用于展示原始 mask 灰度值、自动推断后的类别映射，以及背景/视盘环/视杯像素占比。这张图适合放在数据集介绍之后，用来说明训练前必须检查标签编码，否则会出现“指标虚高但可视化错误”的问题。
-
-本地已确认的数据划分如下：
-
-| 数据划分 | 图像数 | 标签数 |
+| split | 图像数 | 标签数 |
 |---|---:|---:|
 | train | 400 | 400 |
 | val | 400 | 400 |
 | test | 400 | 0 |
 
-建议直接在 PPT 中用一页展示数据规模，并强调 `test` 集无标签，因此模型选择和参数调整主要依赖 `val` 集结果。
+本地标签样例已经确认是三类灰度：
 
-![REFUGE 数据划分与标签统计](../outputs/figures/task2_dataset_stats.png)
+| 文件 | 像素值统计 |
+|---|---|
+| `REFUGE/train/gts/g0001.bmp` | `{0: 36895, 128: 51823, 255: 4278226}` |
+| `REFUGE/train/gts/g0002.bmp` | `{0: 51962, 128: 23263, 255: 4291719}` |
+| `REFUGE/val/gts/V0001.bmp` | `{0: 12124, 128: 35053, 255: 2622779}` |
 
-### 2. 图像与标签展示
-建议在 PPT 中直接放 4 到 6 组典型样本，说明原图、标签图和视盘/视杯区域。
+标签语义映射：
 
-建议插图：
-- 图 2-1 数据集样本总览：`outputs/figures/task2_dataset_overview.png`
-- 图 2-2 结构示意图：`outputs/figures/task2_structure_example.png`
+| 原始灰度 | 训练类别 | 语义 |
+|---:|---:|---|
+| 255 | 0 | 背景 |
+| 128 | 1 | 视盘环区 |
+| 0 | 2 | 视杯 |
 
-可直接放入文档/PPT：
+说明：训练时的视盘指标按 `class 1 + class 2` 计算，因为完整视盘包含视杯区域；视杯指标只按 `class 2` 计算。
 
-![REFUGE 样本总览](../outputs/figures/task2_dataset_overview.png)
+对应代码：
+- `src/refuge_seg/datasets/refuge_dataset.py`
+- `src/refuge_seg/check_data.py`
 
-![视盘与视杯结构示意](../outputs/figures/task2_structure_example.png)
+数据检查命令：
 
-当前可直接写入的观察结论：
-- 视盘区域整体比视杯更大，且边界通常较清晰。
-- 视杯位于视盘内部，二者存在明确的包含关系。
-- 目标区域在整张图中的占比很小，这会带来明显的前景/背景不平衡问题。
+```bash
+export PYTHONPATH=src
+python3 -m refuge_seg.check_data --data-root REFUGE
+```
 
-### 3. 视盘与视杯的直观特点
-- 视盘是眼底图中较大的亮色区域，血管在该区域汇聚。
-- 视杯位于视盘内部，是更小、更中心的区域。
-- 从拓扑结构看，正常情况下视杯应当被视盘完全包含。
+### 1.2 图像和标签展示
 
-本项目会在训练前自动推断原始标签灰度值和训练类别之间的映射。以本地 REFUGE 数据为例，推断结果为：
-- `255 -> 0`：背景
-- `128 -> 1`：视盘环区
-- `0 -> 2`：视杯
+需要放入 PPT 的图片：
 
-在前 50 张训练标签中，像素占比约为：
+| 图片 | 生成脚本 | 用途 |
+|---|---|---|
+| `outputs/figures/task2_dataset_overview.png` | `scripts/plot_task2_dataset.sh` | 展示多组 image/label |
+| `outputs/figures/task2_dataset_stats.png` | `scripts/plot_task2_dataset.sh` | 展示数据划分和像素比例 |
+| `outputs/figures/task2_structure_example.png` | `scripts/plot_task2_dataset.sh` | 展示视盘/视杯结构 |
+| `outputs/figures/task2_label_sanity.png` | `scripts/plot_task2_presentation.sh` | 展示标签值、映射和类别不平衡 |
 
-| 类别 | 原始灰度值 | 语义 | 像素占比 |
-|---|---:|---|---:|
-| class 0 | 255 | 背景 | 98.29% |
-| class 1 | 128 | 视盘环区 | 0.99% |
-| class 2 | 0 | 视杯 | 0.72% |
+生成命令：
 
-这说明：
-- 数据集存在极强的像素级类别不平衡。
-- 单独使用像素级 `CrossEntropy` 时，模型容易偏向背景类。
-- `Dice`、`Dice+CE` 和拓扑约束设计都有明确必要性。
+```bash
+bash scripts/plot_task2_dataset.sh
+bash scripts/plot_task2_presentation.sh
+```
 
-建议 PPT 要点：
-- 用 1 页图说明“视杯在视盘内部”
-- 为后续 optional task 的“拓扑约束”埋下逻辑基础
-- 用 `task2_label_sanity.png` 说明标签编码和类别不平衡，这是答辩时解释多次训练异常的关键证据
+### 1.3 视盘和视杯特点
 
-## 二、Task 2.2 网络调研和选择
+可直接用于 PPT 的描述：
 
-### 1. 主流分割网络简述
-- `FCN`：较早的像素级预测框架，结构简单
-- `U-Net`：编码器-解码器结构，带跳跃连接，医学分割常用基线
-- `DeepLabV3+`：空洞卷积加强上下文建模
-- `UNet++`：多层级跳跃连接，更强调多尺度融合
-- `Attention U-Net`：对 skip feature 做注意力筛选
+- 视盘是眼底图中较大的亮色椭圆区域，通常位于血管汇聚位置。
+- 视杯位于视盘内部，面积更小、更靠中心。
+- 正常结构中视杯应完全包含在视盘内部，这是后续拓扑约束的医学先验。
+- 视盘和视杯在整张图中占比很小，前景/背景极不平衡，因此只用像素级 CE 可能偏向背景类。
 
-### 2. 本项目选型
-本项目基线模型使用 `U-Net`，可选拓扑约束实验使用 `Attention U-Net`。
+## 2. Task 2.2 网络调研和选择
 
-原因：
-- REFUGE 样本规模不大，`U-Net` 更稳健
-- 视盘和视杯边界需要细节恢复，跳跃连接有效
-- `Attention U-Net` 适合做可选任务对比，突出“结构感知”能力
+### 2.1 主流图像分割网络
+
+| 网络 | 核心思想 | 优点 | 局限 |
+|---|---|---|---|
+| FCN | 将分类网络改为全卷积结构做像素预测 | 简洁，是语义分割基础框架 | 细节恢复较弱 |
+| U-Net | 编码器-解码器 + skip connection | 医学图像常用，小数据集表现稳健 | 对复杂边界和结构先验没有显式约束 |
+| DeepLabV3+ | 空洞卷积和 ASPP 多尺度上下文 | 上下文建模强 | 模型较重，训练成本更高 |
+| UNet++ | 密集跳跃连接和多尺度融合 | 边界和尺度融合更细 | 结构更复杂 |
+| Attention U-Net | 在 skip feature 上加入注意力门控 | 能抑制无关背景特征 | 训练成本略高 |
+
+### 2.2 本项目模型选择
+
+基线模型选择 `U-Net`：
+
+- REFUGE 训练集规模不大，U-Net 是医学分割中稳定、可解释的基线。
+- 视盘/视杯边界需要从低层纹理中恢复，U-Net 的 skip connection 适合保留空间细节。
+- U-Net 输出 `[B, 3, H, W]`，直接对应背景、视盘环、视杯三类像素。
+
+Optional task 中使用 `Attention U-Net + TopologyAwareLoss`：
+
+- Attention U-Net 用于增强对目标区域的关注。
+- Topology-aware loss 用于引入“视杯必须在视盘内”的结构先验。
 
 对应代码：
 - `src/refuge_seg/models/unet.py`
 - `src/refuge_seg/models/attention_unet.py`
+- `configs/task2_refuge_baseline.yaml`
+- `configs/task2_refuge_topology.yaml`
 
-建议 PPT 配图：
-- 可手动画一个 U-Net 结构示意图
-- 或插入训练输出图说明“基线模型 + 改进模型”的关系
+## 3. Task 2.3 网络代码、损失函数和指标
 
-## 三、Task 2.3 AI 辅助编写网络代码与损失函数对比
+### 3.1 分割任务与分类任务差异
 
-### 1. 分割任务与分类任务的区别
-- 分类任务输出维度是 `[B, C]`
-- 分割任务输出维度是 `[B, C, H, W]`
-- 分类预测的是整张图的类别
-- 分割预测的是每个像素的类别
-- 分割更依赖区域重叠指标，如 `Dice` 和 `IoU`
+| 对比项 | 分类任务 | 分割任务 |
+|---|---|---|
+| 输入 | `[B, C, H, W]` | `[B, C, H, W]` |
+| 输出 logits | `[B, num_classes]` | `[B, num_classes, H, W]` |
+| 标签 | 图像级类别 | 每个像素一个类别 |
+| 优化目标 | 判断整张图类别 | 判断每个像素类别并保持区域结构 |
+| 常用指标 | Accuracy、F1 | Dice、IoU、边界质量、连通域结构 |
 
-### 2. 损失函数设计
-本项目实现了以下损失函数：
-- `CrossEntropyLoss`
-- `DiceLoss`
-- `Dice + CrossEntropy`
-- `TopologyAwareLoss`（用于 optional task）
+### 3.2 已实现损失函数
+
+| 损失函数 | 配置名 | 优化倾向 | 代码 |
+|---|---|---|---|
+| CrossEntropy | `ce` | 像素级分类，训练稳定，但受背景占比影响大 | `CrossEntropyLoss` |
+| Dice | `dice` | 直接优化区域重叠，对小目标更友好 | `DiceLoss` |
+| Dice + CE | `dice_ce` | 同时兼顾像素分类稳定性和区域重叠 | `DiceCrossEntropyLoss` |
+| Topology | `topology` | 在 Dice+CE 基础上加入结构先验惩罚 | `TopologyAwareLoss` |
 
 对应代码：
 - `src/refuge_seg/losses/segmentation_losses.py`
 
-### 3. 评价指标
-本项目输出：
-- `Dice_disc`
-- `Dice_cup`
-- `IoU_disc`
-- `IoU_cup`
-- `Mean Dice`
-- `Mean IoU`
+### 3.3 已实现评价指标
+
+| 指标 | 计算对象 | 说明 |
+|---|---|---|
+| `dice_disc` | `pred in {1,2}` vs `target in {1,2}` | 完整视盘 Dice |
+| `dice_cup` | `pred == 2` vs `target == 2` | 视杯 Dice |
+| `iou_disc` | 完整视盘 | 视盘 IoU |
+| `iou_cup` | 视杯 | 视杯 IoU |
+| `mean_dice` | disc/cup 平均 | 主模型选择指标 |
+| `mean_iou` | disc/cup 平均 | 辅助指标 |
 
 对应代码：
 - `src/refuge_seg/utils/metrics.py`
+- `src/refuge_seg/evaluate.py`
 
-### 4. 损失函数对比实验
-建议至少做下面几组：
+### 3.4 损失函数对比实验设计
 
-| 实验编号 | 模型 | 损失函数 | 是否后处理 | Mean Dice | Mean IoU | 备注 |
-|---|---|---|---|---:|---:|---|
-| E1 | U-Net | CE | 否 | `待补充` | `待补充` | |
-| E2 | U-Net | Dice | 否 | `待补充` | `待补充` | |
-| E3 | U-Net | Dice+CE | 否 | `待补充` | `待补充` | 推荐主结果 |
-| E4 | U-Net | Dice+CE | 是 | `待补充` | `待补充` | 与 optional task 衔接 |
+已补齐可复现实验配置：
 
-建议 PPT 图片：
-- `outputs/figures/task2_training_curves.png`
-- 若保存了典型预测图，也建议插入一页做 CE / Dice / Dice+CE 可视化比较
-- `outputs/figures/task2_prediction_diagnostics.png`，用于检查预测面积分布是否塌缩成单类或固定模板
+| 实验 | 配置文件 | 模型 | 损失 | 输出目录 | Mean Dice | Mean IoU | 结论 |
+|---|---|---|---|---|---:|---:|---|
+| E1 | `configs/task2_refuge_loss_ce.yaml` | U-Net | CE | `outputs/checkpoints/task2_refuge_loss_ce` | 待补充 | 待补充 | 待补充 |
+| E2 | `configs/task2_refuge_loss_dice.yaml` | U-Net | Dice | `outputs/checkpoints/task2_refuge_loss_dice` | 待补充 | 待补充 | 待补充 |
+| E3 | `configs/task2_refuge_baseline.yaml` | U-Net | Dice+CE | `outputs/checkpoints/task2_refuge_baseline` | 待补充 | 待补充 | 推荐主线 |
 
-训练后运行汇总图：
+运行命令：
+
 ```bash
+bash scripts/train_task2_loss_ablation.sh
+bash scripts/eval_task2_loss_ablation.sh
 bash scripts/plot_task2_results.sh
 ```
 
-训练后补充分析：
-- `[CE 为什么稳定，但对小目标 cup 不一定最好]`
-- `[Dice 为什么更关注区域重叠]`
-- `[Dice+CE 为什么通常更平衡]`
+训练后需要补充：
+- CE 是否出现背景偏置或小目标 cup 分割弱的问题。
+- Dice 是否提升区域重叠，但训练曲线是否更波动。
+- Dice+CE 是否在稳定性和分割精度之间更平衡。
 
-## 四、Task 2.4 模型参数调整与优化
+## 4. Task 2.4 模型参数调整与优化
 
-### 1. 可调参数
-- 学习率 `lr`
-- 批次大小 `batch size`
-- 优化器 `Adam / SGD`
-- 学习率调度器 `scheduler`
-- 训练轮数 `epochs`
-- 输入尺寸 `image_size`
-- 基础通道数 `base_channels`
-- 拓扑惩罚系数 `lambda_topology`
+### 4.1 可调参数
 
-配置文件：
-- `configs/task2_refuge_baseline.yaml`
-- `configs/task2_refuge_topology.yaml`
+| 参数 | 当前默认值 | 作用 |
+|---|---|---|
+| `lr` | `0.0003` | 控制参数更新步长，影响收敛速度和稳定性 |
+| `batch_size` | `4` | 影响显存占用、梯度稳定性和每 epoch 时间 |
+| `optimizer` | `adam` | 控制优化方式 |
+| `scheduler` | `cosine` | 控制训练过程中学习率变化 |
+| `epochs` | `40` | 控制训练轮数 |
+| `image_size` | `512` | 控制输入分辨率和显存开销 |
+| `base_channels` | `32` | 控制模型容量 |
+| `lambda_topology` | `0.5` in topology config | 控制拓扑约束强度 |
 
-### 2. 建议调参表
+### 4.2 参数实验设计
 
-| 参数 | 取值 | 单次训练时长 | Mean Dice | 现象记录 |
-|---|---|---:|---:|---|
-| lr | `3e-4` | `待补充` | `待补充` | baseline |
-| lr | `1e-4` | `待补充` | `待补充` | |
-| batch size | `4` | `待补充` | `待补充` | baseline |
-| batch size | `8` | `待补充` | `待补充` | |
-| scheduler | `cosine` | `待补充` | `待补充` | baseline |
-| scheduler | `step` | `待补充` | `待补充` | |
+已补齐可复现实验配置：
 
-建议 PPT 呈现：
-- 1 页表格总结
-- 1 页曲线图展示收敛差异
+| 实验 | 配置文件 | 改动参数 | 输出目录 | 平均每 epoch 时间 | Mean Dice | 现象记录 |
+|---|---|---|---|---:|---:|---|
+| P1 | `configs/task2_refuge_baseline.yaml` | `lr=3e-4, batch=4, scheduler=cosine` | `task2_refuge_baseline` | 待补充 | 待补充 | baseline |
+| P2 | `configs/task2_refuge_lr_1e4.yaml` | `lr=1e-4` | `task2_refuge_lr_1e4` | 待补充 | 待补充 | 待补充 |
+| P3 | `configs/task2_refuge_batch2.yaml` | `batch_size=2` | `task2_refuge_batch2` | 待补充 | 待补充 | 待补充 |
+| P4 | `configs/task2_refuge_scheduler_step.yaml` | `scheduler=step` | `task2_refuge_scheduler_step` | 待补充 | 待补充 | 待补充 |
 
-训练后补充分析：
-- `[学习率过大/过小各自的影响]`
-- `[batch size 对稳定性和显存的影响]`
-- `[scheduler 对后期收敛的帮助]`
+说明：这里选择 `batch_size=2` 而不是 `8`，是为了降低服务器显存风险；它仍能回答 batch size 对训练速度和稳定性的影响。
 
-## 五、Task 2.5 Optional Task
+运行命令：
 
-### 5.1 分割结果的评估和后处理
+```bash
+bash scripts/train_task2_param_ablation.sh
+bash scripts/eval_task2_param_ablation.sh
+bash scripts/plot_task2_results.sh
+```
 
-#### 1. 孔洞检查
-若视盘或视杯预测区域内部出现空洞，通常说明边界置信度不足，或出现局部断裂。
+代码已经保存训练耗时：
 
-#### 2. 连通域检查
-正常情况下，一张眼底图只应有 1 个主要视盘区域和 1 个主要视杯区域。若出现多个连通域，通常代表伪阳性噪声或局部误分割。
+| 文件 | 内容 |
+|---|---|
+| `outputs/checkpoints/*/history.json` | 每轮 train loss、val loss、val mean dice、epoch time |
+| `outputs/checkpoints/*/training_summary.json` | 总训练时长、平均 epoch 时长、最佳 mean dice |
 
-#### 3. 修复算法设计
-本项目在 `src/refuge_seg/utils/postprocess.py` 中实现了：
-1. 提取视盘和视杯二值区域
-2. 保留最大连通域
-3. 填补孔洞
-4. 强制 `cup ⊆ disc`
+训练后需要补充：
+- 学习率降低后是否收敛更慢但更稳定。
+- batch size 变小后单 epoch 是否更慢、曲线是否更波动。
+- step scheduler 与 cosine scheduler 的后期收敛差异。
 
-这部分是 optional task 的重点，可直接作为 PPT 的方法页。
+## 5. Task 2.5 Optional Task
 
-训练前就可以在 PPT 中先给出设计动机：
-- 由于目标区域非常小，模型容易产生碎片化预测。
-- 由于视杯必须位于视盘内部，仅靠普通像素损失不足以保证结构正确。
-- 因此需要“后处理修复 + 拓扑约束训练”两条增强路线。
+### 5.1 分割效果评估和后处理
 
-建议 PPT 图片：
-- `outputs/figures/task2_optional_cases.png`
-- `outputs/figures/task2_postprocess_flow.png`
+#### 孔洞检查
 
-`task2_postprocess_flow.png` 是一张算法示意图，用人工构造的错误预测展示：
-1. 原始预测中可能存在碎片、孔洞或杯盘结构错误；
-2. 后处理先保留最大连通域；
-3. 再填补孔洞；
-4. 最后强制 `cup` 位于 `disc` 内。
+分割结果中，如果视盘或视杯内部出现背景孔洞，说明模型边界预测不连续或局部置信度不足。正常眼底结构中，视盘和视杯区域应是相对完整的连通区域。
 
-这张图适合放在 optional task 的方法页，比只展示最终预测更容易说明算法设计思路。
+#### 连通域检查
 
-建议表格：
+正常情况下，一张眼底图应只有一个主要视盘区域和一个主要视杯区域。如果预测出现多个连通域，通常代表：
 
-| 实验 | 是否后处理 | 视盘连通域数 | 视杯连通域数 | Mean Dice | 备注 |
-|---|---|---:|---:|---:|---|
-| 原始预测 | 否 | `待补充` | `待补充` | `待补充` | |
-| 修复后预测 | 是 | `待补充` | `待补充` | `待补充` | |
+- 背景区域被误分为视盘或视杯；
+- 小目标 cup 受类别不平衡影响出现碎片；
+- 图像边界、血管遮挡或低对比度造成误判。
 
-训练后补充分析：
-- `[后处理主要修复了哪些错误]`
-- `[后处理对定量指标和视觉效果分别有什么影响]`
+#### 后处理算法设计
+
+本项目实现的后处理流程：
+
+1. 将预测结果转换为 disc mask 和 cup mask。
+2. 对 disc 和 cup 分别保留最大连通域。
+3. 对 disc 和 cup 分别填补孔洞。
+4. 强制执行 `cup = cup * disc`，保证视杯不会超出视盘。
+5. 重新组合成三分类 mask。
+
+对应代码：
+- `src/refuge_seg/utils/postprocess.py`
+
+建议插图：
+- `outputs/figures/task2_postprocess_flow.png`：人工构造错误样例，展示修复流程。
+- `outputs/figures/task2_optional_cases.png`：真实验证集 hard cases 的修复前后对比。
+
+训练后结果表：
+
+| 实验 | 是否后处理 | disc 多连通域样本数 | cup 多连通域样本数 | 孔洞样本数 | Mean Dice | 结论 |
+|---|---|---:|---:|---:|---:|---|
+| Baseline raw | 否 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 |
+| Baseline post | 是 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 |
+
+说明：`evaluate.py` 已保存 `diagnosis_summary`，训练后从 `outputs/checkpoints/*/eval_val/metrics.json` 读取即可。
+
+为了同时保留修复前和修复后的指标，使用：
+
+```bash
+bash scripts/eval_task2_postprocess_ablation.sh
+```
+
+输出目录：
+- `outputs/checkpoints/task2_refuge_baseline/eval_val_raw`
+- `outputs/checkpoints/task2_refuge_baseline/eval_val_post`
 
 ### 5.2 拓扑结构约束
 
-#### 1. 杯盘拓扑关系
-视杯必须位于视盘内部。如果预测结果中有杯区超出盘区边界，则违反解剖结构先验。
+#### 杯盘拓扑关系
 
-#### 2. 约束损失函数设计
-本项目实现了 `TopologyAwareLoss`：
+视杯必须位于视盘内部。如果预测结果中出现 `cup outside disc`，则违反解剖结构先验。这个约束不一定能通过普通 CE 或 Dice 自动满足，因为普通像素损失更关注逐像素分类和区域重叠。
+
+#### 约束损失函数设计
+
+本项目实现 `TopologyAwareLoss`：
+
 - 基础项：`Dice + CrossEntropy`
-- 约束项：惩罚高概率视杯边界邻近背景的区域
-- 直观含义：如果 cup 边界直接贴近 background，说明 cup 周围缺少合理的 disc rim 缓冲，更容易违反“杯在盘内”的结构先验
+- 约束项：对高概率 cup 边界附近出现高背景概率的区域进行惩罚
+- 直观含义：如果 cup 边界直接接近 background，说明 cup 周围缺少合理的 disc rim，容易出现 cup 超出 disc 的结构错误
 
-优点：
-- 直接作用在 soft probability 上
-- 可微，可反向传播
-- 能把医学结构先验引入训练过程
+该损失直接作用于 softmax probability，由 PyTorch tensor 运算组成，因此可微，支持反向传播。
 
-这部分是 optional task 的核心亮点，建议在 PPT 里单独做 1 到 2 页。
+对应代码：
+- `topology_penalty`
+- `TopologyAwareLoss`
+- `configs/task2_refuge_topology.yaml`
 
-#### 3. 难样本对比
-建议比较：
-- 基线模型预测
-- 基线 + 后处理
-- 拓扑约束模型预测
+#### 难样本对比
 
-建议 PPT 图片：
-- `outputs/figures/task2_optional_cases.png`
+训练后需要比较：
 
-建议表格：
-
-| 实验 | 模型 | 损失函数 | Mean Dice | 拓扑违规数 | 难样本表现 |
+| 实验 | 模型 | 损失函数 | Mean Dice | cup outside disc 样本数 | 难样本表现 |
 |---|---|---|---:|---:|---|
-| Baseline | U-Net | Dice+CE | `待补充` | `待补充` | |
-| Topology | Attention U-Net | Topology | `待补充` | `待补充` | |
+| Baseline | U-Net | Dice+CE | 待补充 | 待补充 | 待补充 |
+| Baseline + Postprocess | U-Net | Dice+CE + 后处理 | 待补充 | 待补充 | 待补充 |
+| Topology | Attention U-Net | TopologyAwareLoss | 待补充 | 待补充 | 待补充 |
 
-训练后补充分析：
-- `[拓扑约束是否减少了 cup 超出 disc 的现象]`
-- `[是否牺牲了部分像素级指标换取更合理的结构]`
-- `[在 hard sample 上是否更稳]`
+运行命令：
 
-## 六、建议生成的图片清单
-
-建议在训练后统一生成并整理到 PPT：
-
-| 文件 | 用途 | 建议放置章节 |
-|---|---|---|
-| `outputs/figures/task2_dataset_overview.png` | 数据集样本图 | Task 2.1 |
-| `outputs/figures/task2_label_sanity.png` | 标签编码、类别占比、sanity check | Task 2.1 / 训练异常分析 |
-| `outputs/figures/task2_training_curves.png` | 训练曲线图 | Task 2.3 / 2.4 |
-| `outputs/figures/task2_metrics_bar.png` | 指标柱状图 | Task 2.3 / 2.4 |
-| `outputs/figures/task2_optional_cases.png` | 后处理与拓扑约束对比图 | Task 2.5 |
-| `outputs/figures/task2_postprocess_flow.png` | 后处理算法流程示意 | Task 2.5 |
-| `outputs/figures/task2_prediction_diagnostics.png` | 预测面积分布诊断 | Task 2.3 / 结果可信度检查 |
-| `outputs/checkpoints/*/best_prediction.png` | 单个最佳预测示例 | 任意结果页 |
-| `outputs/checkpoints/*/eval_val/*.png` | 多个验证样本可视化 | Task 2.3 / 2.5 |
-
-## 七、运行顺序
-
-### 1. 生成数据集样本图
-```bash
-bash scripts/plot_task2_dataset.sh
-```
-
-### 2. 训练基线模型
-```bash
-bash scripts/train_task2_baseline.sh
-```
-
-### 3. 训练拓扑约束模型
 ```bash
 bash scripts/train_task2_topology.sh
-```
-
-### 4. 评估并输出验证集结果图
-```bash
-bash scripts/eval_task2.sh
 bash scripts/eval_task2_topology.sh
-```
-
-### 5. 汇总训练曲线和指标图
-```bash
-bash scripts/plot_task2_results.sh
-```
-
-### 6. 生成 optional task 对比图
-```bash
 bash scripts/plot_task2_optional.sh
 ```
 
-### 7. 生成答辩诊断图
-```bash
-bash scripts/plot_task2_presentation.sh
-```
+训练后需要补充：
+- 拓扑约束是否减少 `cup_outside_disc_cases`。
+- 拓扑约束是否改善 hard sample 的结构合理性。
+- 是否存在像素级指标和结构合理性之间的取舍。
 
-该脚本生成：
-- `outputs/figures/task2_label_sanity.png`
-- `outputs/figures/task2_postprocess_flow.png`
-- `outputs/figures/task2_prediction_diagnostics.png`
+## 6. 需要生成的图表清单
 
-建议在每次服务器训练完成、下载 `outputs` 后都运行一次。若 `prediction_summary.json` 不存在，说明当前训练产物不是由最新评估/预测脚本生成，需要重新运行：
-```bash
-bash scripts/eval_task2.sh
-bash scripts/eval_task2_topology.sh
-python3 -m refuge_seg.predict \
-  --config configs/task2_refuge_baseline.yaml \
-  --checkpoint outputs/checkpoints/task2_refuge_baseline/best_model.pt \
-  --input_dir REFUGE/test/Images \
-  --output_dir outputs/predictions/test \
-  --postprocess
-```
+| 文件 | 用途 | PPT 章节 |
+|---|---|---|
+| `outputs/figures/task2_dataset_overview.png` | image/label 示例 | Task 2.1 |
+| `outputs/figures/task2_dataset_stats.png` | 数据划分和像素比例 | Task 2.1 |
+| `outputs/figures/task2_structure_example.png` | 视盘/视杯结构说明 | Task 2.1 |
+| `outputs/figures/task2_label_sanity.png` | 标签编码和类别不平衡检查 | Task 2.1 |
+| `outputs/figures/task2_training_curves.png` | loss 曲线和 mean dice 曲线 | Task 2.3 / 2.4 |
+| `outputs/figures/task2_metrics_bar.png` | 不同实验指标柱状图 | Task 2.3 / 2.4 |
+| `outputs/figures/task2_postprocess_flow.png` | 后处理算法示意 | Task 2.5.1 |
+| `outputs/figures/task2_optional_cases.png` | hard cases 对比 | Task 2.5 |
+| `outputs/figures/task2_prediction_diagnostics.png` | 预测面积分布诊断 | 结果可信度检查 |
+| `outputs/checkpoints/*/best_prediction.png` | 最佳 epoch 的预测示例 | 结果展示 |
+| `outputs/checkpoints/*/eval_val/*.png` | 验证集预测可视化 | 结果展示 |
+| `reports/task2_experiment_summary.md` | 自动汇总实验结果表 | Task 2.3 / 2.4 / 2.5 |
 
-## 八、最终结论页待补充
+## 7. 服务器训练后任务表
 
-训练结束后，你需要在最终 PPT/Markdown 中补充：
-- 哪个损失函数最好，为什么
-- 后处理是否提升了结构合理性
-- 拓扑约束是否减少了解剖结构违规
-- 哪组配置最适合 REFUGE 视盘视杯分割
-- optional task 相比主线任务的增益在哪里
+| 顺序 | 任务 | 命令 | 产物 | 完成后填入报告的位置 |
+|---:|---|---|---|---|
+| 1 | 拉取最新代码并检查三类标签 | `git pull --no-rebase origin main && python3 -m refuge_seg.check_data --data-root REFUGE` | 标签统计 | Task 2.1 |
+| 2 | 生成数据集和标签检查图 | `bash scripts/plot_task2_dataset.sh && bash scripts/plot_task2_presentation.sh` | dataset/label sanity 图 | Task 2.1 |
+| 3 | 跑损失函数对比 | `bash scripts/train_task2_loss_ablation.sh` | CE/Dice/Dice+CE checkpoints | Task 2.3 |
+| 4 | 评估损失函数对比 | `bash scripts/eval_task2_loss_ablation.sh` | `metrics.json`、验证图 | Task 2.3 |
+| 5 | 跑参数对比 | `bash scripts/train_task2_param_ablation.sh` | lr/batch/scheduler checkpoints | Task 2.4 |
+| 6 | 评估参数对比 | `bash scripts/eval_task2_param_ablation.sh` | `metrics.json`、耗时统计 | Task 2.4 |
+| 7 | 跑拓扑约束模型 | `bash scripts/train_task2_topology.sh` | topology checkpoint | Task 2.5.2 |
+| 8 | 评估拓扑模型 | `bash scripts/eval_task2_topology.sh` | topology metrics | Task 2.5.2 |
+| 9 | 保留后处理前后评估 | `bash scripts/eval_task2_postprocess_ablation.sh` | `eval_val_raw`、`eval_val_post` | Task 2.5.1 |
+| 10 | 汇总曲线和指标图 | `bash scripts/plot_task2_results.sh` | curves/bar charts | Task 2.3 / 2.4 |
+| 11 | 生成后处理和 hard sample 图 | `bash scripts/plot_task2_optional.sh && bash scripts/plot_task2_presentation.sh` | optional cases、diagnostics | Task 2.5 |
+| 12 | 自动生成实验结果汇总表 | `bash scripts/summarize_task2_experiments.sh` | `reports/task2_experiment_summary.md` | 复制到 Task 2.3/2.4/2.5 |
+| 13 | 导出 test 预测 | `python3 -m refuge_seg.predict --config configs/task2_refuge_baseline.yaml --checkpoint outputs/checkpoints/task2_refuge_baseline/best_model.pt --input_dir REFUGE/test/Images --output_dir outputs/predictions/test --postprocess` | test masks | 最终提交/展示 |
+| 14 | 打包训练产物下载到本地 | `tar -czf task2_results_$(date +%Y%m%d_%H%M%S).tar.gz outputs reports configs scripts src tests` | 结果压缩包 | 本地制作 PPT |
+
+## 8. PPT 建议结构
+
+| 页码 | 内容 |
+|---:|---|
+| 1 | 题目：REFUGE 视盘视杯分割 |
+| 2 | 数据集结构和任务目标 |
+| 3 | image/label 示例，说明视盘和视杯 |
+| 4 | 标签编码、类别不平衡和数据检查 |
+| 5 | 主流分割网络调研 |
+| 6 | 选择 U-Net 的理由 |
+| 7 | 分割任务 vs 分类任务 |
+| 8 | 损失函数设计：CE、Dice、Dice+CE |
+| 9 | 损失函数对比结果，训练后补图和表 |
+| 10 | 可调参数和实验配置 |
+| 11 | 参数实验结果，训练后补图和表 |
+| 12 | 后处理：孔洞、连通域、cup in disc |
+| 13 | 后处理前后对比，训练后补 hard sample |
+| 14 | 拓扑约束损失设计，可微性说明 |
+| 15 | 普通损失 vs 拓扑约束难样本对比 |
+| 16 | 总结：最佳配置、主要发现、局限 |
+
+## 9. 最终结论页待补充
+
+训练全部完成后补充以下结论：
+
+- CE、Dice、Dice+CE 中哪个综合效果最好，原因是什么。
+- 哪组参数配置在精度、收敛速度和训练成本之间最合适。
+- 后处理是否减少孔洞、多连通域和拓扑违规。
+- 拓扑约束是否改善 hard sample 的结构合理性。
+- 最终推荐用于 test 预测的 checkpoint 是哪一个。

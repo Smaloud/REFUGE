@@ -4,6 +4,7 @@ __pycache__/
 
 REFUGE/
 REFUGE.zip
+*.zip
 octmnist_64.npz
 *.pdf
 *.pptx
