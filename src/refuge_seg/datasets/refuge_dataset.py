@@ -52,19 +52,21 @@ def infer_mask_encoding(root: str | Path, split: str = "train", max_masks: int =
     if not mask_paths:
         return MaskEncoding(background=255, cup=0)
 
-    counts = {0: 0, 128: 0, 255: 0}
+    counts: dict[int, int] = {}
     for path in mask_paths:
         mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
         values, value_counts = np.unique(mask, return_counts=True)
         for value, count in zip(values, value_counts):
-            if int(value) in counts:
-                counts[int(value)] += int(count)
+            counts[int(value)] = counts.get(int(value), 0) + int(count)
 
-    background = 255 if counts[255] >= counts[0] else 0
-    cup = 0 if background == 255 else 255
-    if counts[128] == 0:
-        raise ValueError(f"Could not find REFUGE disc-rim value 128 under {mask_dir}")
-    return MaskEncoding(background=background, cup=cup)
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    if len(ranked) < 3:
+        raise ValueError(f"Expected at least 3 mask values under {mask_dir}, found {ranked}")
+
+    background = ranked[0][0]
+    disc_rim = ranked[1][0]
+    cup = ranked[-1][0]
+    return MaskEncoding(background=background, disc_rim=disc_rim, cup=cup)
 
 
 class REFUGEDataset(Dataset):

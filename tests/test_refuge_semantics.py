@@ -102,3 +102,27 @@ def test_mask_encoding_infers_0_background(tmp_path) -> None:
     assert encoding.background == 0
     assert encoding.cup == 255
     assert sample[2, 2].item() == 2
+
+
+def test_mask_encoding_infers_by_frequency_when_labels_differ(tmp_path) -> None:
+    mask_dir = tmp_path / "train" / "gts"
+    image_dir = tmp_path / "train" / "Images"
+    mask_dir.mkdir(parents=True)
+    image_dir.mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(image_dir / "case1.jpg")
+    mask = np.array(
+        [
+            [10, 10, 10, 10],
+            [10, 20, 20, 10],
+            [10, 30, 30, 10],
+            [10, 10, 10, 10],
+        ],
+        dtype=np.uint8,
+    )
+    Image.fromarray(mask).save(mask_dir / "case1.bmp")
+
+    encoding = infer_mask_encoding(tmp_path)
+
+    assert encoding.background == 10
+    assert encoding.disc_rim == 20
+    assert encoding.cup == 30
