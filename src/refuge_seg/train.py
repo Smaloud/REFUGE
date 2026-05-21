@@ -99,6 +99,7 @@ def main() -> None:
         num_workers=cfg["train"]["num_workers"],
     )
     train_loader, val_loader = build_dataloaders(dataset_cfg)
+    cfg["data"]["mask_encoding"] = train_loader.dataset.mask_encoding.class_to_raw
 
     model = build_model(
         cfg["model"]["name"],
@@ -154,4 +155,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

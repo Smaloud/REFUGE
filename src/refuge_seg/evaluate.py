@@ -57,6 +57,7 @@ def main() -> None:
 
     meter = SegmentationMeter()
     diagnosis = []
+    prediction_summary = {}
     output_dir = Path(cfg["output_dir"]) / f"eval_{args.split}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +75,10 @@ def main() -> None:
 
         meter.update(preds, masks)
         diagnosis.append(diagnose_prediction(preds[0].numpy()))
+        values, counts = np.unique(preds[0].numpy(), return_counts=True)
+        prediction_summary[batch["id"][0]] = {
+            str(int(value)): int(count) for value, count in zip(values, counts)
+        }
 
         if index < 8:
             save_prediction_grid(
@@ -85,11 +90,15 @@ def main() -> None:
 
     summary = meter.compute()
     summary["diagnosis_examples"] = diagnosis[:20]
+    summary["num_unique_class_distributions"] = len(
+        {tuple(sorted(item.items())) for item in prediction_summary.values()}
+    )
     with open(output_dir / "metrics.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "prediction_summary.json", "w", encoding="utf-8") as f:
+        json.dump(prediction_summary, f, indent=2, ensure_ascii=False)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
     main()
-

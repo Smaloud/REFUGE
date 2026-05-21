@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch
@@ -13,11 +12,27 @@ from torchvision.transforms import functional as TF
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-MASK_TO_CLASS = {
-    255: 0,  # background
-    128: 1,  # optic disc rim
-    0: 2,  # optic cup
-}
+@dataclass(frozen=True)
+class MaskEncoding:
+    background: int
+    disc_rim: int = 128
+    cup: int = 0
+
+    @property
+    def raw_to_class(self) -> dict[int, int]:
+        return {
+            self.background: 0,
+            self.disc_rim: 1,
+            self.cup: 2,
+        }
+
+    @property
+    def class_to_raw(self) -> dict[int, int]:
+        return {
+            0: self.background,
+            1: self.disc_rim,
+            2: self.cup,
+        }
 
 
 @dataclass
@@ -26,6 +41,30 @@ class DatasetConfig:
     image_size: int = 512
     batch_size: int = 4
     num_workers: int = 4
+
+
+def infer_mask_encoding(root: str | Path, split: str = "train", max_masks: int = 20) -> MaskEncoding:
+    mask_dir = Path(root) / split / "gts"
+    mask_paths = sorted(mask_dir.glob("*.bmp"))[:max_masks]
+    if not mask_paths and split != "val":
+        mask_dir = Path(root) / "val" / "gts"
+        mask_paths = sorted(mask_dir.glob("*.bmp"))[:max_masks]
+    if not mask_paths:
+        return MaskEncoding(background=255, cup=0)
+
+    counts = {0: 0, 128: 0, 255: 0}
+    for path in mask_paths:
+        mask = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+        values, value_counts = np.unique(mask, return_counts=True)
+        for value, count in zip(values, value_counts):
+            if int(value) in counts:
+                counts[int(value)] += int(count)
+
+    background = 255 if counts[255] >= counts[0] else 0
+    cup = 0 if background == 255 else 255
+    if counts[128] == 0:
+        raise ValueError(f"Could not find REFUGE disc-rim value 128 under {mask_dir}")
+    return MaskEncoding(background=background, cup=cup)
 
 
 class REFUGEDataset(Dataset):
@@ -44,6 +83,7 @@ class REFUGEDataset(Dataset):
         self.masks_dir = self.root / split / "gts"
         self.has_masks = self.masks_dir.exists()
         self.image_paths = sorted(self.images_dir.glob("*.jpg"))
+        self.mask_encoding = infer_mask_encoding(self.root, split) if self.has_masks else infer_mask_encoding(self.root)
 
         if not self.image_paths:
             raise FileNotFoundError(f"No images found under {self.images_dir}")
@@ -85,7 +125,7 @@ class REFUGEDataset(Dataset):
         mask = mask.resize((self.image_size, self.image_size), Image.NEAREST)
         mask = np.array(mask, dtype=np.uint8)
         mapped = np.zeros_like(mask, dtype=np.int64)
-        for raw_value, class_id in MASK_TO_CLASS.items():
+        for raw_value, class_id in self.mask_encoding.raw_to_class.items():
             mapped[mask == raw_value] = class_id
         if do_hflip:
             mapped = np.fliplr(mapped).copy()

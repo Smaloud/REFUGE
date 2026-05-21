@@ -1,6 +1,8 @@
 import numpy as np
 import torch
+from PIL import Image
 
+from refuge_seg.datasets.refuge_dataset import REFUGEDataset, infer_mask_encoding
 from refuge_seg.utils.metrics import SegmentationMeter
 from refuge_seg.utils.postprocess import diagnose_prediction, postprocess_prediction
 
@@ -48,3 +50,55 @@ def test_postprocess_keeps_cup_inside_complete_disc() -> None:
     assert diagnosis["disc_components"] == 1
     assert diagnosis["cup_components"] == 1
     assert not diagnosis["cup_outside_disc"]
+
+
+def test_mask_encoding_infers_255_background(tmp_path) -> None:
+    mask_dir = tmp_path / "train" / "gts"
+    image_dir = tmp_path / "train" / "Images"
+    mask_dir.mkdir(parents=True)
+    image_dir.mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(image_dir / "case1.jpg")
+    mask = np.array(
+        [
+            [255, 255, 255, 255],
+            [255, 128, 128, 255],
+            [255, 128, 0, 255],
+            [255, 255, 255, 255],
+        ],
+        dtype=np.uint8,
+    )
+    Image.fromarray(mask).save(mask_dir / "case1.bmp")
+
+    encoding = infer_mask_encoding(tmp_path)
+    dataset = REFUGEDataset(tmp_path, "train", image_size=4)
+    sample = dataset[0]["mask"]
+
+    assert encoding.background == 255
+    assert encoding.cup == 0
+    assert sample[2, 2].item() == 2
+
+
+def test_mask_encoding_infers_0_background(tmp_path) -> None:
+    mask_dir = tmp_path / "train" / "gts"
+    image_dir = tmp_path / "train" / "Images"
+    mask_dir.mkdir(parents=True)
+    image_dir.mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(image_dir / "case1.jpg")
+    mask = np.array(
+        [
+            [0, 0, 0, 0],
+            [0, 128, 128, 0],
+            [0, 128, 255, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    Image.fromarray(mask).save(mask_dir / "case1.bmp")
+
+    encoding = infer_mask_encoding(tmp_path)
+    dataset = REFUGEDataset(tmp_path, "train", image_size=4)
+    sample = dataset[0]["mask"]
+
+    assert encoding.background == 0
+    assert encoding.cup == 255
+    assert sample[2, 2].item() == 2
