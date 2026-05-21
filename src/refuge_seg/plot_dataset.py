@@ -44,7 +44,7 @@ def main() -> None:
     for row, batch in enumerate(samples):
         image = denormalize(batch["image"][0])
         mask = batch["mask"][0].numpy()
-        disc = (mask == 1).astype(np.uint8) * 255
+        disc = np.isin(mask, [1, 2]).astype(np.uint8) * 255
         cup = (mask == 2).astype(np.uint8) * 255
 
         axes[row, 0].imshow(image)

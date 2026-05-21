@@ -19,7 +19,6 @@ def iou_score(pred_mask: torch.Tensor, true_mask: torch.Tensor, eps: float = 1e-
 
 @dataclass
 class SegmentationMeter:
-    class_ids: tuple[int, ...] = (1, 2)
     history: dict[str, list[float]] = field(
         default_factory=lambda: {
             "dice_disc": [],
@@ -30,18 +29,18 @@ class SegmentationMeter:
     )
 
     def update(self, preds: torch.Tensor, targets: torch.Tensor) -> None:
-        for class_id, dice_key, iou_key in [
-            (1, "dice_disc", "iou_disc"),
-            (2, "dice_cup", "iou_cup"),
-        ]:
-            pred_mask = (preds == class_id).float()
-            true_mask = (targets == class_id).float()
-            self.history[dice_key].append(dice_score(pred_mask, true_mask))
-            self.history[iou_key].append(iou_score(pred_mask, true_mask))
+        pred_disc = ((preds == 1) | (preds == 2)).float()
+        true_disc = ((targets == 1) | (targets == 2)).float()
+        pred_cup = (preds == 2).float()
+        true_cup = (targets == 2).float()
+
+        self.history["dice_disc"].append(dice_score(pred_disc, true_disc))
+        self.history["iou_disc"].append(iou_score(pred_disc, true_disc))
+        self.history["dice_cup"].append(dice_score(pred_cup, true_cup))
+        self.history["iou_cup"].append(iou_score(pred_cup, true_cup))
 
     def compute(self) -> dict[str, float]:
         results = {key: sum(values) / max(len(values), 1) for key, values in self.history.items()}
         results["mean_dice"] = (results["dice_disc"] + results["dice_cup"]) / 2
         results["mean_iou"] = (results["iou_disc"] + results["iou_cup"]) / 2
         return results
-

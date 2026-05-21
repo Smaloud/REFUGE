@@ -38,10 +38,13 @@ class DiceCrossEntropyLoss(nn.Module):
 
 def topology_penalty(logits: torch.Tensor) -> torch.Tensor:
     probs = F.softmax(logits, dim=1)
-    disc = probs[:, 1]
-    cup = probs[:, 2]
-    overflow = torch.relu(cup - disc)
-    return overflow.mean()
+    background = probs[:, 0:1]
+    cup = probs[:, 2:3]
+    cup_max = F.max_pool2d(cup, kernel_size=3, stride=1, padding=1)
+    cup_min = -F.max_pool2d(-cup, kernel_size=3, stride=1, padding=1)
+    cup_boundary = torch.relu(cup_max - cup_min)
+    nearby_background = F.max_pool2d(background, kernel_size=9, stride=1, padding=4)
+    return (cup_boundary * nearby_background).mean()
 
 
 class TopologyAwareLoss(nn.Module):
@@ -65,4 +68,3 @@ def build_loss(name: str, lambda_topology: float = 0.3) -> nn.Module:
     if name == "topology":
         return TopologyAwareLoss(DiceCrossEntropyLoss(), lambda_topology=lambda_topology)
     raise ValueError(f"Unsupported loss: {name}")
-

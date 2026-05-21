@@ -15,7 +15,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 MASK_TO_CLASS = {
     255: 0,  # background
-    128: 1,  # optic disc
+    128: 1,  # optic disc rim
     0: 2,  # optic cup
 }
 

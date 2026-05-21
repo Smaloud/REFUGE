@@ -67,7 +67,7 @@ def build_structure_example(root: Path, output: Path) -> None:
     mask_file = Image.open(mask_path)
     mask_file.load()
     mask = np.array(mask_file.convert("L"))
-    disc = (mask == 128).astype(np.uint8)
+    disc = np.isin(mask, [0, 128]).astype(np.uint8)
     cup = (mask == 0).astype(np.uint8)
 
     overlay = image.copy().astype(np.float32)

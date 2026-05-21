@@ -19,7 +19,7 @@ def _fill_holes(mask: np.ndarray) -> np.ndarray:
 
 def postprocess_prediction(pred: np.ndarray) -> np.ndarray:
     processed = np.zeros_like(pred, dtype=np.uint8)
-    disc = (pred == 1).astype(np.uint8)
+    disc = np.isin(pred, [1, 2]).astype(np.uint8)
     cup = (pred == 2).astype(np.uint8)
 
     disc = _fill_holes(_keep_largest_component(disc))
@@ -32,7 +32,7 @@ def postprocess_prediction(pred: np.ndarray) -> np.ndarray:
 
 
 def diagnose_prediction(pred: np.ndarray) -> dict[str, int | bool]:
-    disc = (pred == 1).astype(np.uint8)
+    disc = np.isin(pred, [1, 2]).astype(np.uint8)
     cup = (pred == 2).astype(np.uint8)
     disc_components = ndimage.label(disc)[1]
     cup_components = ndimage.label(cup)[1]
@@ -46,4 +46,3 @@ def diagnose_prediction(pred: np.ndarray) -> dict[str, int | bool]:
         "cup_holes_pixels": cup_holes,
         "cup_outside_disc": cup_outside_disc,
     }
-

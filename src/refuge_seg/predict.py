@@ -60,12 +60,11 @@ def main() -> None:
         pred = torch.argmax(model(image), dim=1)[0].cpu().numpy().astype(np.uint8)
         if args.postprocess:
             pred = postprocess_prediction(pred)
-        save_mask = np.zeros_like(pred, dtype=np.uint8)
+        save_mask = np.full_like(pred, 255, dtype=np.uint8)
         save_mask[pred == 1] = 128
-        save_mask[pred == 2] = 255
+        save_mask[pred == 2] = 0
         Image.fromarray(save_mask).save(output_dir / f"{image_path.stem}.bmp")
 
 
 if __name__ == "__main__":
     main()
-
