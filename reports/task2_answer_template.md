@@ -16,6 +16,7 @@
 建议 PPT 图片：
 - `outputs/figures/task2_dataset_overview.png`
 - `outputs/figures/task2_dataset_stats.png`
+- `outputs/figures/task2_label_sanity.png`
 
 生成命令：
 ```bash
@@ -26,6 +27,13 @@ bash scripts/plot_task2_dataset.sh
 - `outputs/figures/task2_dataset_overview.png`
 - `outputs/figures/task2_dataset_stats.png`
 - `outputs/figures/task2_structure_example.png`
+
+额外建议生成答辩诊断图：
+```bash
+bash scripts/plot_task2_presentation.sh
+```
+
+其中 `outputs/figures/task2_label_sanity.png` 用于展示原始 mask 灰度值、自动推断后的类别映射，以及背景/视盘环/视杯像素占比。这张图适合放在数据集介绍之后，用来说明训练前必须检查标签编码，否则会出现“指标虚高但可视化错误”的问题。
 
 本地已确认的数据划分如下：
 
@@ -62,9 +70,9 @@ bash scripts/plot_task2_dataset.sh
 - 视杯位于视盘内部，是更小、更中心的区域。
 - 从拓扑结构看，正常情况下视杯应当被视盘完全包含。
 
-本项目将原始标签灰度值映射为训练类别：
+本项目会在训练前自动推断原始标签灰度值和训练类别之间的映射。以本地 REFUGE 数据为例，推断结果为：
 - `255 -> 0`：背景
-- `128 -> 1`：视盘
+- `128 -> 1`：视盘环区
 - `0 -> 2`：视杯
 
 在前 50 张训练标签中，像素占比约为：
@@ -72,7 +80,7 @@ bash scripts/plot_task2_dataset.sh
 | 类别 | 原始灰度值 | 语义 | 像素占比 |
 |---|---:|---|---:|
 | class 0 | 255 | 背景 | 98.29% |
-| class 1 | 128 | 视盘 | 0.99% |
+| class 1 | 128 | 视盘环区 | 0.99% |
 | class 2 | 0 | 视杯 | 0.72% |
 
 这说明：
@@ -83,6 +91,7 @@ bash scripts/plot_task2_dataset.sh
 建议 PPT 要点：
 - 用 1 页图说明“视杯在视盘内部”
 - 为后续 optional task 的“拓扑约束”埋下逻辑基础
+- 用 `task2_label_sanity.png` 说明标签编码和类别不平衡，这是答辩时解释多次训练异常的关键证据
 
 ## 二、Task 2.2 网络调研和选择
 
@@ -153,6 +162,7 @@ bash scripts/plot_task2_dataset.sh
 建议 PPT 图片：
 - `outputs/figures/task2_training_curves.png`
 - 若保存了典型预测图，也建议插入一页做 CE / Dice / Dice+CE 可视化比较
+- `outputs/figures/task2_prediction_diagnostics.png`，用于检查预测面积分布是否塌缩成单类或固定模板
 
 训练后运行汇总图：
 ```bash
@@ -226,6 +236,15 @@ bash scripts/plot_task2_results.sh
 
 建议 PPT 图片：
 - `outputs/figures/task2_optional_cases.png`
+- `outputs/figures/task2_postprocess_flow.png`
+
+`task2_postprocess_flow.png` 是一张算法示意图，用人工构造的错误预测展示：
+1. 原始预测中可能存在碎片、孔洞或杯盘结构错误；
+2. 后处理先保留最大连通域；
+3. 再填补孔洞；
+4. 最后强制 `cup` 位于 `disc` 内。
+
+这张图适合放在 optional task 的方法页，比只展示最终预测更容易说明算法设计思路。
 
 建议表格：
 
@@ -246,8 +265,8 @@ bash scripts/plot_task2_results.sh
 #### 2. 约束损失函数设计
 本项目实现了 `TopologyAwareLoss`：
 - 基础项：`Dice + CrossEntropy`
-- 约束项：惩罚 `cup_prob > disc_prob` 的区域
-- 数学形式：`relu(cup_prob - disc_prob).mean()`
+- 约束项：惩罚高概率视杯边界邻近背景的区域
+- 直观含义：如果 cup 边界直接贴近 background，说明 cup 周围缺少合理的 disc rim 缓冲，更容易违反“杯在盘内”的结构先验
 
 优点：
 - 直接作用在 soft probability 上
@@ -284,9 +303,12 @@ bash scripts/plot_task2_results.sh
 | 文件 | 用途 | 建议放置章节 |
 |---|---|---|
 | `outputs/figures/task2_dataset_overview.png` | 数据集样本图 | Task 2.1 |
+| `outputs/figures/task2_label_sanity.png` | 标签编码、类别占比、sanity check | Task 2.1 / 训练异常分析 |
 | `outputs/figures/task2_training_curves.png` | 训练曲线图 | Task 2.3 / 2.4 |
 | `outputs/figures/task2_metrics_bar.png` | 指标柱状图 | Task 2.3 / 2.4 |
 | `outputs/figures/task2_optional_cases.png` | 后处理与拓扑约束对比图 | Task 2.5 |
+| `outputs/figures/task2_postprocess_flow.png` | 后处理算法流程示意 | Task 2.5 |
+| `outputs/figures/task2_prediction_diagnostics.png` | 预测面积分布诊断 | Task 2.3 / 结果可信度检查 |
 | `outputs/checkpoints/*/best_prediction.png` | 单个最佳预测示例 | 任意结果页 |
 | `outputs/checkpoints/*/eval_val/*.png` | 多个验证样本可视化 | Task 2.3 / 2.5 |
 
@@ -321,6 +343,28 @@ bash scripts/plot_task2_results.sh
 ### 6. 生成 optional task 对比图
 ```bash
 bash scripts/plot_task2_optional.sh
+```
+
+### 7. 生成答辩诊断图
+```bash
+bash scripts/plot_task2_presentation.sh
+```
+
+该脚本生成：
+- `outputs/figures/task2_label_sanity.png`
+- `outputs/figures/task2_postprocess_flow.png`
+- `outputs/figures/task2_prediction_diagnostics.png`
+
+建议在每次服务器训练完成、下载 `outputs` 后都运行一次。若 `prediction_summary.json` 不存在，说明当前训练产物不是由最新评估/预测脚本生成，需要重新运行：
+```bash
+bash scripts/eval_task2.sh
+bash scripts/eval_task2_topology.sh
+python3 -m refuge_seg.predict \
+  --config configs/task2_refuge_baseline.yaml \
+  --checkpoint outputs/checkpoints/task2_refuge_baseline/best_model.pt \
+  --input_dir REFUGE/test/Images \
+  --output_dir outputs/predictions/test \
+  --postprocess
 ```
 
 ## 八、最终结论页待补充
